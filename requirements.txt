@@ -1,0 +1,16 @@
+# Web framework
+Flask>=3.0
+
+# Computer vision / numerics
+opencv-python>=4.8
+numpy>=1.24
+
+# Face detection (YOLOv8) and recognition (FaceNet)
+ultralytics>=8.0
+torch>=2.0
+facenet-pytorch>=2.5
+
+
+
+# Used by download_model.py to fetch the YOLOv8 weights
+huggingface_hub>=0.23

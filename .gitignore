@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Models and Caches
+*.pt
+model/.cache/
+model/events.out.tfevents.*
+model/fine-tune-artifacts/
+
+# Database files (except the README)
+database/*.jpg
+database/*.jpeg
+database/*.png
+database/*.bmp
+!database/README.md
+
+# Environment and IDE files
+venv/
+env/
+.venv/
+.idea/
+.vscode/
+
+# OS specific files
+.DS_Store
+Thumbs.db

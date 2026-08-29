@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Phosphor Icons for modern SVG icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation (Design element) -->
+        <aside class="sidebar glass">
+            <div class="logo">
+                <i class="ph-fill ph-scan"></i>
+                <h2>FaceID</h2>
+            </div>
+            <nav>
+                <a href="#" class="active"><i class="ph ph-video-camera"></i> Live Feed</a>
+                <a href="#database-section"><i class="ph ph-users"></i> Database</a>
+                <a href="#upload-section"><i class="ph ph-upload-simple"></i> Enroll</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header>
+                <div>
+                    <h1>Surveillance Dashboard</h1>
+                    <p>Real-time Face Recognition Dashboard</p>
+                </div>
+                <div class="status-indicator">
+                    <span class="pulse"></span> System Active
+                </div>
+            </header>
+
+            <!-- Video Feed Section -->
+            <section class="video-section">
+                <div class="glass-card video-card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-broadcast"></i> Live Camera Feed</h3>
+                        <div class="badge green">Live</div>
+                    </div>
+                    <div class="video-container">
+                        <img src="{{ url_for('video_feed') }}" alt="Live Video Feed" class="video-stream">
+                        <div class="scanning-line"></div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="grid-layout">
+                <!-- Enrollment / Upload Section -->
+                <section id="upload-section" class="glass-card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-user-plus"></i> Enroll New Face</h3>
+                    </div>
+                    <form id="enroll-form" action="/api/upload" method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="person_name">Person Name</label>
+                            <input type="text" id="person_name" name="name" placeholder="e.g. John Doe" required>
+                        </div>
+                        <div class="form-group upload-area" id="drop-zone">
+                            <input type="file" id="face_image" name="image" accept="image/*" required hidden>
+                            <div class="upload-content">
+                                <i class="ph ph-image"></i>
+                                <p>Click or drag image here to upload</p>
+                                <span class="file-name" id="file-name-display">No file selected</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                            <button type="submit" class="btn primary-btn"><i class="ph ph-paper-plane-right"></i> Upload Photo</button>
+                            <button type="button" id="live-enroll-btn" class="btn secondary-btn" style="background: rgba(16, 185, 129, 0.2); color: var(--success);"><i class="ph ph-camera"></i> Live Capture</button>
+                        </div>
+                    </form>
+                    <div id="upload-status" class="status-msg"></div>
+                </section>
+
+                <!-- Database Gallery Section -->
+                <section id="database-section" class="glass-card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-users-three"></i> Enrolled Subjects</h3>
+                        <button class="btn icon-btn" id="refresh-db" title="Refresh Database"><i class="ph ph-arrows-clockwise"></i></button>
+                    </div>
+                    <div class="gallery-grid" id="faces-gallery">
+                        <!-- Populated by JS -->
+                        <div class="loader-spinner"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // File Upload UI Interaction
+        const fileInput = document.getElementById('face_image');
+        const dropZone = document.getElementById('drop-zone');
+        const fileNameDisplay = document.getElementById('file-name-display');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                fileNameDisplay.textContent = e.target.files[0].name;
+                dropZone.classList.add('has-file');
+            }
+        });
+
+        // Form Submit Handler (AJAX)
+        document.getElementById('enroll-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const statusDiv = document.getElementById('upload-status');
+            const submitBtn = form.querySelector('button');
+            
+            statusDiv.className = 'status-msg info';
+            statusDiv.textContent = 'Enrolling...';
+            submitBtn.disabled = true;
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if(response.ok) {
+                    statusDiv.className = 'status-msg success';
+                    statusDiv.innerHTML = `<i class="ph ph-check-circle"></i> ${result.message}`;
+                    form.reset();
+                    fileNameDisplay.textContent = 'No file selected';
+                    dropZone.classList.remove('has-file');
+                    loadDatabase(); // Refresh gallery
+                } else {
+                    throw new Error(result.error || 'Upload failed');
+                }
+            } catch (err) {
+                statusDiv.className = 'status-msg error';
+                statusDiv.innerHTML = `<i class="ph ph-warning-circle"></i> ${err.message}`;
+            } finally {
+                submitBtn.disabled = false;
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 5000);
+                statusDiv.style.display = 'flex';
+            }
+        });
+
+        // Live Enroll Handler (AJAX)
+        document.getElementById('live-enroll-btn').addEventListener('click', async () => {
+            const nameInput = document.getElementById('person_name').value.trim();
+            const statusDiv = document.getElementById('upload-status');
+            const liveBtn = document.getElementById('live-enroll-btn');
+
+            if (!nameInput) {
+                statusDiv.className = 'status-msg error';
+                statusDiv.innerHTML = `<i class="ph ph-warning-circle"></i> Please enter a Person Name first.`;
+                statusDiv.style.display = 'flex';
+                return;
+            }
+
+            statusDiv.className = 'status-msg info';
+            statusDiv.innerHTML = '<i class="ph ph-spinner"></i> Capturing from live feed... Please look at the camera!';
+            statusDiv.style.display = 'flex';
+            liveBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/live_enroll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: nameInput })
+                });
+                
+                const result = await response.json();
+                
+                if(response.ok) {
+                    statusDiv.className = 'status-msg success';
+                    statusDiv.innerHTML = `<i class="ph ph-check-circle"></i> ${result.message}`;
+                    document.getElementById('enroll-form').reset();
+                    fileNameDisplay.textContent = 'No file selected';
+                    dropZone.classList.remove('has-file');
+                    loadDatabase(); // Refresh gallery
+                } else {
+                    throw new Error(result.error || 'Live capture failed');
+                }
+            } catch (err) {
+                statusDiv.className = 'status-msg error';
+                statusDiv.innerHTML = `<i class="ph ph-warning-circle"></i> ${err.message}`;
+            } finally {
+                liveBtn.disabled = false;
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 5000);
+            }
+        });
+
+        // Load Database Gallery
+        async function loadDatabase() {
+            const gallery = document.getElementById('faces-gallery');
+            try {
+                const response = await fetch('/api/faces');
+                const faces = await response.json();
+                
+                gallery.innerHTML = '';
+                
+                if(faces.length === 0) {
+                    gallery.innerHTML = '<p class="empty-state">No faces enrolled yet.</p>';
+                    return;
+                }
+
+                faces.forEach(face => {
+                    const card = document.createElement('div');
+                    card.className = 'face-card';
+                    card.innerHTML = `
+                        <img src="${face.url}" alt="${face.name}">
+                        <div class="face-info">
+                            <h4>${face.name}</h4>
+                            <button class="delete-btn" onclick="deleteFace('${face.filename}')" title="Delete">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    gallery.appendChild(card);
+                });
+            } catch (err) {
+                gallery.innerHTML = '<p class="error">Failed to load database.</p>';
+            }
+        }
+
+        // Delete Face
+        async function deleteFace(filename) {
+            if(confirm('Are you sure you want to remove this face?')) {
+                try {
+                    const response = await fetch(`/api/faces/${filename}`, { method: 'DELETE' });
+                    if(response.ok) {
+                        loadDatabase(); // Refresh
+                    } else {
+                        alert('Failed to delete face.');
+                    }
+                } catch (err) {
+                    alert('Error communicating with server.');
+                }
+            }
+        }
+
+        document.getElementById('refresh-db').addEventListener('click', loadDatabase);
+
+        // Initial Load
+        window.addEventListener('DOMContentLoaded', loadDatabase);
+    </script>
+</body>
+</html>
